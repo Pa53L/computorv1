@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+cd bin || exit
+java -jar computorV1-1.0-SNAPSHOT-jar-with-dependencies.jar "$0"

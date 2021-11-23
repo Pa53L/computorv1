@@ -1,140 +1,158 @@
 package solver;
 
-public class Parser {
-    private double[] coefficients;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-    public double[] getCoefficients() {
-        return coefficients;
+public class Parser {
+    private final Map<String, Double> lexemes;
+    private final String reducedForm;
+    private final int maxDegree;
+    double a = 0.0;
+    double b = 0.0;
+    double c = 0.0;
+
+    public Parser(String equation) {
+        this.lexemes = regexParser(equation);
+        this.reducedForm = reduce();
+        this.maxDegree = findMaxDegree();
+        defineCoefficients();
     }
 
-    private int maxDegree;
+    private Map<String, Double> regexParser(String str) {
+        Map<String, Double> lexemes = new LinkedHashMap<>();
+        int sign = 1;
+        String[] splitInput = str.split("=");
+        if (splitInput.length != 2) {
+            throw new IllegalArgumentException("Incorrect input. Please, write a polynomial second or lower degree equation.");
+        }
+        Pattern pattern = Pattern.compile("([+-])?(\\d+(\\.)?(\\d+)?)?((\\*)?([Xx]\\^?\\d?))?");
+
+        for (int i = 0; i < splitInput.length; i++) {
+            if (i == 1) {
+                sign = -1;
+            }
+            Matcher matcher = pattern.matcher(splitInput[i]);
+            while (matcher.find()) {
+                String tmp = matcher.group();
+                String[] potentialLexeme = tmp.split("\\*");
+                if (potentialLexeme.length == 2) {
+                    if (lexemes.containsKey(potentialLexeme[1])) {
+                        lexemes.put(potentialLexeme[1], lexemes.get(potentialLexeme[1]) + sign * Double.parseDouble(potentialLexeme[0]));
+                    } else {
+                        lexemes.put(potentialLexeme[1], sign * Double.parseDouble(potentialLexeme[0]));
+                    }
+                } else {
+                    if (!tmp.isEmpty() && !tmp.isBlank()) {
+                        if (lexemes.containsKey("freeMember")) {
+                            lexemes.put("freeMember", lexemes.get("freeMember") + sign * Double.parseDouble(tmp));
+                        } else {
+                            lexemes.put("freeMember", sign * Double.parseDouble(tmp));
+                        }
+                    }
+                }
+            }
+        }
+        return lexemes;
+    }
+
+    private String reduce() {
+        StringBuilder sb = new StringBuilder("");
+        for (Map.Entry<String, Double> entry : lexemes.entrySet()) {
+            if (entry.getKey().equals("freeMember")) {
+                addCoefficient(sb, entry);
+            } else if (entry.getKey().startsWith("X")) {
+                addCoefficient(sb, entry);
+                sb.append(" * ");
+                sb.append(entry.getKey());
+            }
+        }
+
+        return sb.append(" = 0").toString();
+    }
+
+    private void addCoefficient(StringBuilder sb, Map.Entry<String, Double> entry) {
+        String value = getStringCoef(entry.getValue());
+        if (entry.getValue() >= 0.0) {
+            if (sb.toString().equals("")) {
+                sb.append(value);
+            } else {
+                sb.append(" + ").append(value);
+            }
+        } else {
+            if (sb.toString().equals("")) {
+                sb.append(value);
+            } else {
+                sb.append(" - ").append(value);
+            }
+        }
+    }
+
+    private String getStringCoef(double value) {
+        if (value >= 0.0) {
+            if ((int) value - value < 0.000001) {
+                return String.format("%.0f", value);
+            } else {
+                return String.format("%.1f", value);
+            }
+        } else {
+            if ((int) value - value < 0.000001) {
+                return String.format("%.0f", value * -1);
+            } else {
+                return String.format("%.1f", value * -1);
+            }
+        }
+    }
+
+    private int findMaxDegree() {
+        int degree = 0;
+        for (Map.Entry<String, Double> entry : lexemes.entrySet()) {
+            if (entry.getKey().startsWith("X")) {
+                String tmp = entry.getKey().substring(2);
+                for (int i = 0; i < tmp.length(); i++) {
+                    if (tmp.charAt(i) < '0' || tmp.charAt(i) > '9') {
+                        throw new IllegalArgumentException("Incorrect degree");
+                    }
+                }
+                int d = Integer.parseInt(entry.getKey().substring(2));
+                if (d > this.maxDegree && entry.getValue() != 0.0) {
+                    degree = d;
+                }
+            }
+        }
+        return degree;
+    }
+
+    private void defineCoefficients() {
+        for (Map.Entry<String, Double> entry : lexemes.entrySet()) {
+            if (entry.getKey().equals("X^0") || entry.getKey().equals("freeMember")) {
+                c += entry.getValue();
+            } else if (entry.getKey().equals("X^1")) {
+                b += entry.getValue();
+            } else if (entry.getKey().equals("X^2")) {
+                a += entry.getValue();
+            }
+        }
+    }
+
+    public String getReducedForm() {
+        return reducedForm;
+    }
 
     public int getMaxDegree() {
         return maxDegree;
     }
 
-    private String equation;
-
-    public Parser(String equation) {
-        this.equation = manageFreeFormEntrie(equation);
-        String tmp = this.equation;
-        this.maxDegree = defineDegree(tmp);
-        this.coefficients = new double[this.maxDegree + 1];
-        this.equation = this.equation.replaceAll("\\s+", "");
-        defineCoefficients(this.equation, this.coefficients);
-        correctDegree();
+    public double getA() {
+        return a;
     }
 
-    private static String manageFreeFormEntrie(String equation) {
-        if (equation.startsWith("X"))
-            equation = "1 * " + equation;
-        if (equation.endsWith("X"))
-            equation += "^1";
-        equation = equation.replaceAll("= X", "= 1 * X");
-        equation = equation.replaceAll("\\+ X", "+ 1 * X");
-        equation = equation.replaceAll("- X", "- 1 * X");
-        equation = equation.replaceAll("-X", "- 1 * X");
-        equation = equation.replaceAll("X \\+", "X^1 +");
-        equation = equation.replaceAll("X -", "X^1 -");
-        equation = equation.replaceAll("X-", "X^1 -");
-        equation = equation.replaceAll("X =", "X^1 =");
-        return checkConstantTerm(equation);
+    public double getB() {
+        return b;
     }
 
-    private static String checkConstantTerm(String equation) {
-        int i;
-        int min;
-        String member;
-        String rest = "";
-
-        while (!equation.isEmpty()) {
-            min = Integer.MAX_VALUE;
-            i = equation.indexOf('-');
-            if (i != -1) {
-                min = i;
-            }
-            i = equation.indexOf('+');
-            if (i != -1 && i < min)
-                min = i;
-            i = equation.indexOf('=');
-            if (i != -1 && i < min)
-                min = i;
-            if (min != Integer.MAX_VALUE) {
-                member = equation.substring(0, min);
-            } else {
-                member = equation;
-                equation = "";
-            }
-            if (!member.contains("X") && !member.isEmpty() && !member.equals(" "))
-                member += "* X^0 ";
-            rest += member;
-            if (min != 2147483647) {
-                equation = equation.substring(min);
-                rest += equation.substring(0, 1);
-                equation = equation.substring(1);
-            }
-        }
-        return rest;
+    public double getC() {
+        return c;
     }
-
-
-    // TODO разобраться и переписать defineDegree
-    private int defineDegree(String equation) {
-        String tmp = equation;
-        int t;
-        int degree = -1;
-
-        while (!tmp.isEmpty()) {
-            t = tmp.indexOf("^");
-            tmp = tmp.substring(t + 1);
-            t = tmp.indexOf(" ");
-            int i;
-            if (t == -1) {
-                i = Integer.parseInt(tmp);
-            } else {
-                i = Integer.parseInt(tmp.substring(0, t));
-            }
-            if (i > degree) {
-                degree = i;
-            }
-            if (t != -1)
-                tmp = tmp.substring(t + 1);
-            else
-                break;
-        }
-        return degree;
-    }
-
-    private double[] defineCoefficients(String equation, double[] coefficients) {
-        int t;
-        double coef;
-        int degree;
-        int sign = 1;
-
-        while (!equation.isEmpty()) {
-            t = equation.indexOf("*");
-            if (equation.indexOf("=") == 0) {
-                sign = -1;
-                equation = equation.substring(1);
-                t--;
-            }
-            coef = sign * Double.parseDouble(equation.substring(0, t));
-            equation = equation.substring(t + 3);
-            t = 0;
-            while (t != equation.length() && (equation.charAt(t) != '+') && (equation.charAt(t) != '=') && (equation.charAt(t) != '-')) {
-                t++;
-            }
-            degree = Integer.parseInt(equation.substring(0, t));
-            equation = equation.substring(t);
-            coefficients[degree] += coef;
-        }
-        return coefficients;
-    }
-
-    private void correctDegree() {
-        while (maxDegree != 0 && coefficients[maxDegree] == 0) {
-            maxDegree--;
-        }
-    }
-
 }
