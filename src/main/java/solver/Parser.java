@@ -1,6 +1,7 @@
 package solver;
 
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -14,6 +15,8 @@ public class Parser {
     double c = 0.0;
 
     public Parser(String equation) {
+        equation = freeForm(equation);
+        equation = equation.replaceAll("\\s+", "").toUpperCase(Locale.ROOT);
         this.lexemes = regexParser(equation);
         this.reducedForm = reduce();
         this.maxDegree = findMaxDegree();
@@ -70,6 +73,22 @@ public class Parser {
         }
 
         return sb.append(" = 0").toString();
+    }
+
+    private String freeForm(String equation) {
+        if (equation.startsWith("X"))
+            equation = "1 * " + equation;
+        if (equation.endsWith("X"))
+            equation += "^1";
+        equation = equation.replaceAll("= X", "= 1 * X");
+        equation = equation.replaceAll("\\+ X", "+ 1 * X");
+        equation = equation.replaceAll("- X", "- 1 * X");
+        equation = equation.replaceAll("-X", "- 1 * X");
+        equation = equation.replaceAll("X \\+", "X^1 +");
+        equation = equation.replaceAll("X -", "X^1 -");
+        equation = equation.replaceAll("X-", "X^1 -");
+        equation = equation.replaceAll("X =", "X^1 =");
+        return equation;
     }
 
     private void addCoefficient(StringBuilder sb, Map.Entry<String, Double> entry) {
